@@ -89,7 +89,7 @@
     <label for="birthdate">Password / Date of Birth (YYMMDD)</label>
     <input type="password" id="birthdate" placeholder="비밀번호 또는 생년월일 6자리">
     
-    <button onclick="requestBill()">로그인 / 고지서 조회</button>
+    <button type="button" onclick="requestBill()">로그인 / 고지서 조회</button>
     <div class="loading" id="loadingMsg">🔄 정보 인증 중입니다. 잠시만 기다려주세요...</div>
     <div class="error" id="errorMsg"></div>
   </div>
@@ -115,10 +115,10 @@
       </div>
 
       <div class="control-group">
-        <button class="admin-btn admin-btn-accent" onclick="downloadBatchJPG()">📷 JPG 일괄 다운로드</button>
-        <button class="admin-btn admin-btn-template" onclick="downloadTemplateExcel()">📑 표준 양식 다운로드</button>
-        <button class="admin-btn" onclick="exportMasterDBToExcel()">📊 엑셀 반출</button>
-        <button class="admin-btn admin-btn-warn" onclick="document.getElementById('excelFileInput').click()">📥 엑셀 업로드</button>
+        <button type="button" class="admin-btn admin-btn-accent" onclick="downloadBatchJPG()">📷 JPG 일괄 다운로드</button>
+        <button type="button" class="admin-btn admin-btn-template" onclick="downloadTemplateExcel()">📑 표준 양식 다운로드</button>
+        <button type="button" class="admin-btn" onclick="exportMasterDBToExcel()">📊 엑셀 반출</button>
+        <button type="button" class="admin-btn admin-btn-warn" onclick="document.getElementById('excelFileInput').click()">📥 엑셀 업로드</button>
         <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display:none;" onchange="uploadMasterDBExcel(event)">
       </div>
     </div>
@@ -133,18 +133,16 @@
     </div>
     
     <div class="btn-group">
-      <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
-      <button class="back-btn" onclick="goBack()">Back to Home</button>
+      <button type="button" class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+      <button type="button" class="back-btn" onclick="goBack()">Back to Home</button>
     </div>
   </div>
 
- <script>
-    // --- 0. Supabase 접속 설정 (반드시 1번만 선언!) ---
+  <script>
+    // --- 0. Supabase 접속 단일 선언 ---
     const SUPABASE_URL = "https://trihisveyutyxhjfrwzt.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRyaWhpc3ZleXV0eXhoamZyd3p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3Mzg1NzUsImV4cCI6MjEwNjMxNDU3NX0.3eB8W3wbNs9-VL8A88ccIdN3sbBRLI4nS7yLYP6mpyk";
-    
-    // 이 줄이 코드 다른 곳에 또 들어가 있다면 다른 곳의 것은 삭제하세요!
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const copyTypes = [
       "(학교보관용 University Copy)",
@@ -155,7 +153,6 @@
     let globalAdminStudents = [];
     let currentRole = 'STUDENT';
 
-    // 금액 포맷팅 헬퍼
     function formatMoneyDisplay(val) {
       if (val === "" || val === null || val === undefined) return "0";
       var cleanStr = val.toString().replace(/[₩\\, ]/g, "").trim();
@@ -170,7 +167,6 @@
       return Number(cleanStr).toLocaleString();
     }
 
-    // DB 객체 -> 뷰 모델 매핑
     function parseStudentObject(row) {
       const isInst = (row.is_installment && row.is_installment.toString().trim().toUpperCase() === "Y") ? "Y" : "N";
       let birthStr = row.birth ? row.birth.toString().trim() : "";
@@ -202,12 +198,10 @@
         optTitleEng: row.opt_title_eng || "",
         optAmount: row.opt_amount ? formatMoneyDisplay(row.opt_amount) : "",
         classGroup: row.class_group || "",
-        // 원본 숫자 데이터(엑셀 반출용)
         _raw: row
       };
     }
 
-    // 1. 로그인 요청 (GAS의 loginUser 함수 대체)
     async function requestBill() {
       const id = document.getElementById('studentId').value.trim();
       const pw = document.getElementById('birthdate').value.trim();
@@ -224,8 +218,8 @@
       loading.style.display = 'block';
 
       try {
-        // [A] 관리자 계정 조회
-        const { data: adminData, error: adminErr } = await supabase
+        // [1] 관리자 계정 확인
+        const { data: adminData, error: adminErr } = await supabaseClient
           .from('admin_users')
           .select('*')
           .eq('id', id)
@@ -233,11 +227,9 @@
           .maybeSingle();
 
         if (adminData) {
-          // 관리자 로그인 성공
-          await supabase.from('access_logs').insert([{ user_id: id, user_name: `ADMIN (${adminData.role})`, status: 'SUCCESS' }]);
+          await supabaseClient.from('access_logs').insert([{ user_id: id, user_name: `ADMIN (${adminData.role})`, status: 'SUCCESS' }]);
           
-          // 전체 학생 데이터 로드
-          const { data: allRows, error: dbErr } = await supabase
+          const { data: allRows, error: dbErr } = await supabaseClient
             .from('master_db')
             .select('*')
             .order('id', { ascending: true });
@@ -253,13 +245,13 @@
           return;
         }
 
-        // [B] 학생 계정 조회
+        // [2] 학생 계정 확인
         let searchBirth = pw;
         if (/^\d{1,5}$/.test(searchBirth)) {
           searchBirth = searchBirth.padStart(6, '0');
         }
 
-        const { data: studentData, error: studentErr } = await supabase
+        const { data: studentData, error: studentErr } = await supabaseClient
           .from('master_db')
           .select('*')
           .eq('id', id)
@@ -270,7 +262,7 @@
 
         if (studentData) {
           const parsed = parseStudentObject(studentData);
-          await supabase.from('access_logs').insert([{ user_id: id, user_name: parsed.name, status: 'SUCCESS' }]);
+          await supabaseClient.from('access_logs').insert([{ user_id: id, user_name: parsed.name, status: 'SUCCESS' }]);
 
           document.getElementById('loginBox').style.display = 'none';
           document.getElementById('result-container').style.display = 'block';
@@ -278,7 +270,7 @@
           currentRole = 'STUDENT';
           renderBillUI(parsed);
         } else {
-          await supabase.from('access_logs').insert([{ user_id: id, user_name: 'UNKNOWN', status: 'FAILED' }]);
+          await supabaseClient.from('access_logs').insert([{ user_id: id, user_name: 'UNKNOWN', status: 'FAILED' }]);
           error.textContent = "아이디(학번) 또는 비밀번호(생년월일 6자리)가 일치하지 않습니다.";
           error.style.display = 'block';
         }
@@ -289,7 +281,6 @@
       }
     }
 
-    // 2. 관리자 필터 컨트롤
     function initAdminControls() {
       const degreeSelect = document.getElementById('degreeFilter');
       degreeSelect.innerHTML = '<option value="ALL">전체 학위과정</option>';
@@ -362,7 +353,6 @@
       }
     }
 
-    // 3. 고지서 렌더링 (3단 양식)
     function renderBillUI(student) {
       let installmentPeriodText = "해당사항 없음";
       let installmentBottomRows = "";
@@ -471,7 +461,6 @@
       document.getElementById('dynamic-bills').innerHTML = htmlContent;
     }
 
-    // 4. 일괄 JPG 다운로드
     async function downloadBatchJPG() {
       const selectedDegree = document.getElementById('degreeFilter').value;
       const selectedClass = document.getElementById('courseFilter').value;
@@ -519,7 +508,6 @@
       alert("JPG 일괄 다운로드가 완료되었습니다!");
     }
 
-    // 5. 엑셀 표준 템플릿 다운로드
     function downloadTemplateExcel() {
       const headers = [
         "학번", "생년월일 6자리\n(비밀번호)", "성명", "학과", "00과정 외국인유학생\n(학부/석사/박사)", "학차", 
@@ -543,7 +531,6 @@
       XLSX.writeFile(wb, `SCU_MasterDB_Template.xlsx`);
     }
 
-    // 6. DB 엑셀 반출
     function exportMasterDBToExcel() {
       if (!globalAdminStudents || globalAdminStudents.length === 0) {
         alert("반출할 DB 데이터가 없습니다.");
@@ -592,7 +579,6 @@
       XLSX.writeFile(wb, `SCU_MasterDB_${new Date().toISOString().slice(0,10)}.xlsx`);
     }
 
-    // 7. 엑셀 업로드 (Supabase master_db 일괄 갱신)
     function uploadMasterDBExcel(event) {
       const file = event.target.files[0];
       if (!file) return;
@@ -661,16 +647,14 @@
         document.getElementById('portalTitle').innerText = "🔄 MasterDB 서버 업데이트 중...";
 
         try {
-          // 기존 데이터 삭제 후 일괄 삽입(교체)
-          await supabase.from('master_db').delete().neq('id', '___NONE___');
-          const { error: upsertErr } = await supabase.from('master_db').upsert(upsertPayload);
+          await supabaseClient.from('master_db').delete().neq('id', '___NONE___');
+          const { error: upsertErr } = await supabaseClient.from('master_db').upsert(upsertPayload);
 
           if (upsertErr) throw upsertErr;
 
           alert("MasterDB가 성공적으로 업데이트되었습니다.");
 
-          // 갱신된 데이터 재조회
-          const { data: refreshedRows } = await supabase.from('master_db').select('*').order('id', { ascending: true });
+          const { data: refreshedRows } = await supabaseClient.from('master_db').select('*').order('id', { ascending: true });
           globalAdminStudents = (refreshedRows || []).map(parseStudentObject);
           initAdminControls();
           document.getElementById('portalTitle').innerText = "📄 Tuition Bill Issued";
