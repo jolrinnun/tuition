@@ -138,10 +138,12 @@
     </div>
   </div>
 
-  <script>
-    // --- 0. Supabase 접속 설정 ---
-    const SUPABASE_URL = "https://trihisveyutyxhjfrwzt.supabase.co"; // 올바른 Project URL
+ <script>
+    // --- 0. Supabase 접속 설정 (반드시 1번만 선언!) ---
+    const SUPABASE_URL = "https://trihisveyutyxhjfrwzt.supabase.co";
     const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRyaWhpc3ZleXV0eXhoamZyd3p0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3Mzg1NzUsImV4cCI6MjEwNjMxNDU3NX0.3eB8W3wbNs9-VL8A88ccIdN3sbBRLI4nS7yLYP6mpyk";
+    
+    // 이 줄이 코드 다른 곳에 또 들어가 있다면 다른 곳의 것은 삭제하세요!
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     const copyTypes = [
