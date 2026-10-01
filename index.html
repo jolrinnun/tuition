@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>SCU Tuition Bill Portal</title>
+
+  <!-- Supabase, 이미지 생성, 압축 파일 다운로드, 엑셀 처리 CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+  <style>
+    body { font-family: 'Malgun Gothic', 'Arial', sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; }
+    
+    .login-container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; text-align: center; }
+    .logo { max-width: 120px; height: auto; margin-bottom: 15px; }
+    h2 { color: #0f703d; margin-top: 0; margin-bottom: 25px; font-size: 22px; font-weight: bold; }
+    label { display: block; text-align: left; font-weight: bold; margin-top: 15px; margin-bottom: 6px; color: #333333; font-size: 14px; }
+    input, select { width: 100%; padding: 12px; box-sizing: border-box; border: 1px solid #dadce0; border-radius: 6px; font-size: 15px; }
+    button { width: 100%; padding: 12px; background-color: #0f703d; color: white; border: none; border-radius: 6px; font-size: 15px; font-weight: bold; cursor: pointer; transition: 0.2s; margin-top: 20px; }
+    button:hover { background-color: #0b532d; }
+    .error { color: #d93025; font-size: 14px; margin-top: 15px; display: none; text-align: left; }
+    .loading { color: #5f6368; font-size: 14px; margin-top: 15px; display: none; }
+
+    #admin-panel { display: none; width: 100%; max-width: 1350px; background: #e8f5e9; border: 1px solid #a5d6a7; padding: 15px 20px; border-radius: 12px; margin-bottom: 20px; box-sizing: border-box; }
+    .admin-controls { display: flex; flex-wrap: wrap; gap: 15px; align-items: center; justify-content: space-between; }
+    .control-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .admin-btn { padding: 10px 16px; font-size: 13px; margin-top: 0; width: auto; background-color: #1b5e20; }
+    .admin-btn-accent { background-color: #0277bd; }
+    .admin-btn-accent:hover { background-color: #01579b; }
+    .admin-btn-template { background-color: #546e7a; }
+    .admin-btn-template:hover { background-color: #37474f; }
+    .admin-btn-warn { background-color: #e65100; }
+    .admin-btn-warn:hover { background-color: #bf360c; }
+
+    #result-container { display: none; width: 100%; max-width: 1350px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); box-sizing: border-box; }
+    .bill-wrapper { display: flex; justify-content: space-between; width: 100%; position: relative; background: #fff; padding: 10px; box-sizing: border-box; }
+    .bill-column { width: 32%; box-sizing: border-box; padding: 10px; font-size: 11px; color: #000; line-height: 1.4; position: relative; }
+    .bill-column:not(:last-child)::after { content: ''; position: absolute; right: -2.5%; top: 0; height: 100%; width: 1px; border-right: 1px dashed #777; }
+
+    .semester-header { text-align: center; font-weight: bold; font-size: 12px; margin-bottom: 10px; }
+    .bill-title-box { border: 2px solid #000; text-align: center; padding: 6px; font-size: 15px; font-weight: bold; margin-bottom: 5px; }
+    .copy-type { text-align: right; font-size: 11px; font-weight: bold; margin-bottom: 8px; }
+
+    .bill-table { width: 100%; border-collapse: collapse; margin-bottom: 8px; table-layout: fixed; }
+    .bill-table th, .bill-table td { border: 1px solid #000; padding: 4px 6px; font-size: 10px; vertical-align: middle; height: 24px; box-sizing: border-box; }
+    .bill-table th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+    .sub-label { font-size: 8px; color: #444; display: block; font-weight: normal; margin-top: -2px; }
+    .text-right { text-align: right; font-weight: bold; }
+
+    .receipt-text { text-align: left; margin: 8px 0; font-size: 11px; font-weight: bold; }
+
+    .date-row { display: flex; position: relative; justify-content: center; margin-bottom: 15px; height: 35px; align-items: center; }
+    .date-center-text { font-size: 12px; font-weight: bold; letter-spacing: 12px; padding-left: 12px; color: #333; }
+    .stamp-box { border: 1px solid #000; width: 50px; height: 35px; text-align: center; line-height: 35px; font-size: 9px; color: #555; position: absolute; right: 0; top: 0; }
+
+    .president-title { text-align: left; font-size: 16px; font-weight: bold; margin-bottom: 8px; letter-spacing: 1px; }
+    .account-info { font-weight: bold; font-size: 11px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 5px; }
+
+    .notices { font-size: 9px; list-style: none; padding: 0; margin: 0; }
+    .notices li { margin-bottom: 5px; text-indent: -8px; padding-left: 8px; }
+    .notices .eng-sub { display: block; font-size: 8px; color: #555; font-weight: normal; }
+
+    .btn-group { margin-top: 25px; display: flex; gap: 12px; justify-content: center; width: 100%; }
+    .print-btn { background-color: #1a73e8; margin-top: 0; max-width: 200px; }
+    .print-btn:hover { background-color: #1557b0; }
+    .back-btn { background-color: #5f6368; margin-top: 0; max-width: 200px; }
+    .back-btn:hover { background-color: #3c4043; }
+
+    @media print {
+      @page { size: A4 landscape; margin: 5mm; }
+      body { background-color: #ffffff; padding: 0; margin: 0; }
+      .login-container, .btn-group, #admin-panel, #result-container > h2, #result-container > p { display: none !important; }
+      #result-container { box-shadow: none; padding: 0; max-width: 100%; display: block !important; }
+      .bill-column:not(:last-child)::after { border-right: 1px dashed #000; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="login-container" id="loginBox">
+    <img src="https://lh3.googleusercontent.com/d/1I4kyOrPd-gdIIwuQqRC6dPErm8zs9BZU" alt="SCU Logo" class="logo">
+    <h2>Tuition Bill Portal</h2>
+    
+    <label for="studentId">ID / Student ID</label>
+    <input type="text" id="studentId" placeholder="학번 또는 관리자 ID 입력">
+    
+    <label for="birthdate">Password / Date of Birth (YYMMDD)</label>
+    <input type="password" id="birthdate" placeholder="비밀번호 또는 생년월일 6자리">
+    
+    <button onclick="requestBill()">로그인 / 고지서 조회</button>
+    <div class="loading" id="loadingMsg">🔄 정보 인증 중입니다. 잠시만 기다려주세요...</div>
+    <div class="error" id="errorMsg"></div>
+  </div>
+
+  <!-- 관리자 모드 컨트롤 패널 -->
+  <div id="admin-panel">
+    <div style="font-weight: bold; color: #1b5e20; margin-bottom: 10px; font-size: 16px;">🔑 관리자 모드 컨트롤 타워</div>
+    <div class="admin-controls">
+      <div class="control-group">
+        <label style="margin:0; font-size: 13px;">학위과정:</label>
+        <select id="degreeFilter" style="width: auto; padding: 6px 10px;" onchange="onDegreeChange()">
+          <option value="ALL">전체 학위과정</option>
+        </select>
+
+        <label style="margin:0; font-size: 13px; margin-left: 10px;">분반:</label>
+        <select id="courseFilter" style="width: auto; padding: 6px 10px;" onchange="filterStudents()">
+          <option value="ALL">전체 분반</option>
+        </select>
+
+        <label style="margin:0; font-size: 13px; margin-left: 10px;">학생 선택:</label>
+        <select id="studentSelect" style="width: auto; padding: 6px 10px; min-width: 220px;" onchange="renderSelectedStudentBill()">
+        </select>
+      </div>
+
+      <div class="control-group">
+        <button class="admin-btn admin-btn-accent" onclick="downloadBatchJPG()">📷 JPG 일괄 다운로드</button>
+        <button class="admin-btn admin-btn-template" onclick="downloadTemplateExcel()">📑 표준 양식 다운로드</button>
+        <button class="admin-btn" onclick="exportMasterDBToExcel()">📊 엑셀 반출</button>
+        <button class="admin-btn admin-btn-warn" onclick="document.getElementById('excelFileInput').click()">📥 엑셀 업로드</button>
+        <input type="file" id="excelFileInput" accept=".xlsx, .xls, .csv" style="display:none;" onchange="uploadMasterDBExcel(event)">
+      </div>
+    </div>
+  </div>
+
+  <div id="result-container">
+    <h2 style="text-align:center;" id="portalTitle">📄 Tuition Bill Issued</h2>
+    <p style="text-align:center; color: #5f6368;" id="portalSubText">Click 'Print' and set destination as 'Save as PDF' or select your printer.</p>
+    
+    <div class="bill-wrapper" id="printArea">
+      <div id="dynamic-bills" style="display:flex; justify-content:space-between; width:100%;"></div>
+    </div>
+    
+    <div class="btn-group">
+      <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+      <button class="back-btn" onclick="goBack()">Back to Home</button>
+    </div>
+  </div>
+
+  <script>
+    // --- 0. Supabase 접속 설정 ---
+    const SUPABASE_URL = "https://YOUR_PROJECT_ID.supabase.co"; // 본인의 Project URL
+    const SUPABASE_ANON_KEY = "YOUR_ANON_PUBLIC_KEY";         // 본인의 anon public key
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const copyTypes = [
+      "(학교보관용 University Copy)",
+      "(수납보관용 Bank Copy)",
+      "(개인보관용 Student Copy)"
+    ];
+
+    let globalAdminStudents = [];
+    let currentRole = 'STUDENT';
+
+    // 금액 포맷팅 헬퍼
+    function formatMoneyDisplay(val) {
+      if (val === "" || val === null || val === undefined) return "0";
+      var cleanStr = val.toString().replace(/[₩\\, ]/g, "").trim();
+      if (cleanStr === "" || isNaN(cleanStr)) return "0";
+      return Math.abs(Number(cleanStr)).toLocaleString();
+    }
+
+    function formatScholarshipDisplay(val) {
+      if (val === "" || val === null || val === undefined) return "0";
+      var cleanStr = val.toString().replace(/[₩\\, \-]/g, "").trim();
+      if (cleanStr === "" || isNaN(cleanStr) || Number(cleanStr) === 0) return "0";
+      return Number(cleanStr).toLocaleString();
+    }
+
+    // DB 객체 -> 뷰 모델 매핑
+    function parseStudentObject(row) {
+      const isInst = (row.is_installment && row.is_installment.toString().trim().toUpperCase() === "Y") ? "Y" : "N";
+      let birthStr = row.birth ? row.birth.toString().trim() : "";
+      if (/^\d{1,5}$/.test(birthStr)) {
+        birthStr = birthStr.padStart(6, '0');
+      }
+
+      return {
+        id: row.id || "",
+        birth: birthStr,
+        name: row.name || "",
+        major: row.major || "",
+        degree: row.degree || "",
+        course: row.degree || "",
+        sems: row.sems || "",
+        registrationPeriod: row.registration_period || "",
+        tuition: formatMoneyDisplay(row.tuition),
+        scholarship: formatScholarshipDisplay(row.scholarship),
+        prepayment: formatMoneyDisplay(row.prepayment),
+        netPay: formatMoneyDisplay(row.net_pay),
+        isInstallment: isInst,
+        installmentPeriod: row.installment_period || "",
+        inst1: formatMoneyDisplay(row.inst1),
+        inst2: formatMoneyDisplay(row.inst2),
+        bankName: row.bank_name || "",
+        bankNameEng: row.bank_name_eng || "",
+        accountNo: row.account_no || "",
+        optTitle: row.opt_title || "",
+        optTitleEng: row.opt_title_eng || "",
+        optAmount: row.opt_amount ? formatMoneyDisplay(row.opt_amount) : "",
+        classGroup: row.class_group || "",
+        // 원본 숫자 데이터(엑셀 반출용)
+        _raw: row
+      };
+    }
+
+    // 1. 로그인 요청 (GAS의 loginUser 함수 대체)
+    async function requestBill() {
+      const id = document.getElementById('studentId').value.trim();
+      const pw = document.getElementById('birthdate').value.trim();
+      const error = document.getElementById('errorMsg');
+      const loading = document.getElementById('loadingMsg');
+
+      if (!id || !pw) {
+        error.textContent = "아이디와 비밀번호를 모두 입력하세요.";
+        error.style.display = 'block';
+        return;
+      }
+
+      error.style.display = 'none';
+      loading.style.display = 'block';
+
+      try {
+        // [A] 관리자 계정 조회
+        const { data: adminData, error: adminErr } = await supabase
+          .from('admin_users')
+          .select('*')
+          .eq('id', id)
+          .eq('password', pw)
+          .maybeSingle();
+
+        if (adminData) {
+          // 관리자 로그인 성공
+          await supabase.from('access_logs').insert([{ user_id: id, user_name: `ADMIN (${adminData.role})`, status: 'SUCCESS' }]);
+          
+          // 전체 학생 데이터 로드
+          const { data: allRows, error: dbErr } = await supabase
+            .from('master_db')
+            .select('*')
+            .order('id', { ascending: true });
+
+          loading.style.display = 'none';
+          document.getElementById('loginBox').style.display = 'none';
+          document.getElementById('result-container').style.display = 'block';
+          document.getElementById('admin-panel').style.display = 'block';
+          currentRole = 'ADMIN';
+
+          globalAdminStudents = (allRows || []).map(parseStudentObject);
+          initAdminControls();
+          return;
+        }
+
+        // [B] 학생 계정 조회
+        let searchBirth = pw;
+        if (/^\d{1,5}$/.test(searchBirth)) {
+          searchBirth = searchBirth.padStart(6, '0');
+        }
+
+        const { data: studentData, error: studentErr } = await supabase
+          .from('master_db')
+          .select('*')
+          .eq('id', id)
+          .eq('birth', searchBirth)
+          .maybeSingle();
+
+        loading.style.display = 'none';
+
+        if (studentData) {
+          const parsed = parseStudentObject(studentData);
+          await supabase.from('access_logs').insert([{ user_id: id, user_name: parsed.name, status: 'SUCCESS' }]);
+
+          document.getElementById('loginBox').style.display = 'none';
+          document.getElementById('result-container').style.display = 'block';
+          document.getElementById('admin-panel').style.display = 'none';
+          currentRole = 'STUDENT';
+          renderBillUI(parsed);
+        } else {
+          await supabase.from('access_logs').insert([{ user_id: id, user_name: 'UNKNOWN', status: 'FAILED' }]);
+          error.textContent = "아이디(학번) 또는 비밀번호(생년월일 6자리)가 일치하지 않습니다.";
+          error.style.display = 'block';
+        }
+      } catch (err) {
+        loading.style.display = 'none';
+        error.textContent = "서버 통신 오류: " + err.message;
+        error.style.display = 'block';
+      }
+    }
+
+    // 2. 관리자 필터 컨트롤
+    function initAdminControls() {
+      const degreeSelect = document.getElementById('degreeFilter');
+      degreeSelect.innerHTML = '<option value="ALL">전체 학위과정</option>';
+
+      const degrees = [...new Set(globalAdminStudents.map(s => s.degree).filter(Boolean))];
+      degrees.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d;
+        opt.textContent = d;
+        degreeSelect.appendChild(opt);
+      });
+
+      onDegreeChange();
+    }
+
+    function onDegreeChange() {
+      const selectedDegree = document.getElementById('degreeFilter').value;
+      const courseSelect = document.getElementById('courseFilter');
+      courseSelect.innerHTML = '<option value="ALL">전체 분반</option>';
+
+      const filteredByDegree = selectedDegree === 'ALL'
+        ? globalAdminStudents
+        : globalAdminStudents.filter(s => s.degree === selectedDegree);
+
+      const classes = [...new Set(filteredByDegree.map(s => s.classGroup).filter(Boolean))];
+      classes.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        courseSelect.appendChild(opt);
+      });
+
+      filterStudents();
+    }
+
+    function filterStudents() {
+      const selectedDegree = document.getElementById('degreeFilter').value;
+      const selectedClass = document.getElementById('courseFilter').value;
+      const studentSelect = document.getElementById('studentSelect');
+      studentSelect.innerHTML = '';
+
+      let filtered = globalAdminStudents;
+      if (selectedDegree !== 'ALL') {
+        filtered = filtered.filter(s => s.degree === selectedDegree);
+      }
+      if (selectedClass !== 'ALL') {
+        filtered = filtered.filter(s => s.classGroup === selectedClass);
+      }
+
+      filtered.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        const displayClass = s.classGroup ? ` [${s.classGroup}]` : '';
+        opt.textContent = `${s.id} - ${s.name}${displayClass} (${s.degree || '미지정'})`;
+        studentSelect.appendChild(opt);
+      });
+
+      if (filtered.length > 0) {
+        renderSelectedStudentBill();
+      } else {
+        document.getElementById('dynamic-bills').innerHTML = '<div style="text-align:center; width:100%; padding:40px;">조회된 학생이 없습니다.</div>';
+      }
+    }
+
+    function renderSelectedStudentBill() {
+      const studentId = document.getElementById('studentSelect').value;
+      const student = globalAdminStudents.find(s => s.id === studentId);
+      if (student) {
+        renderBillUI(student);
+      }
+    }
+
+    // 3. 고지서 렌더링 (3단 양식)
+    function renderBillUI(student) {
+      let installmentPeriodText = "해당사항 없음";
+      let installmentBottomRows = "";
+      let registrationEnglishSub = "Period of Registration"; 
+      
+      const formattedRegPeriod = (student.registrationPeriod || "").replace(/\n/g, "<br>");
+      
+      let scholarshipDisplay = "0";
+      if (student.scholarship && student.scholarship !== "0") {
+        scholarshipDisplay = `-₩${student.scholarship}`;
+      }
+
+      let prepaymentDisplay = (student.prepayment && student.prepayment !== "0") ? `₩${student.prepayment}` : "0";
+
+      if (student.isInstallment === "Y") {
+        const formattedInstPeriod = (student.installmentPeriod || "").replace(/\n/g, "<br>");
+        installmentPeriodText = formattedInstPeriod + `<br><span class="eng-sub" style="font-size:7px;">Period of Application Installment (Half of Total)</span>`;
+        registrationEnglishSub = "Period of Registration (Half of Total)"; 
+        installmentBottomRows = `
+          <li style="margin-top:4px; font-weight:bold;">* 1차 분납액 (1st install payment) : ₩${student.inst1}</li>
+          <li style="font-weight:bold;">* 2차 분납액 (2nd install payment) : ₩${student.inst2}</li>
+        `;
+      } else {
+        installmentPeriodText += `<br><span class="eng-sub" style="font-size:7px;">Period of Application Installment</span>`;
+      }
+      
+      let optionalRowHtml = "";
+      if (student.optTitle && student.optAmount !== "" && student.optAmount !== "0") {
+        const optSubEng = student.optTitleEng ? `<span class="sub-label">${student.optTitleEng}</span>` : "";
+        optionalRowHtml = `
+          <tr>
+            <th colspan="3" style="text-align:left;">${student.optTitle}${optSubEng}</th>
+            <td class="text-right">₩${student.optAmount}</td>
+          </tr>
+        `;
+      }
+      
+      let htmlContent = "";
+      copyTypes.forEach(function(typeText) {
+        htmlContent += `
+          <div class="bill-column">
+            <div class="semester-header">2026년 2학기<br><span style="font-size:10px; font-weight:normal;">2026 Fall Semester</span></div>
+            <div class="bill-title-box">등록금 납입고지서 (Tuition fee Bill)</div>
+            <div class="copy-type">${typeText}</div>
+            
+            <table class="bill-table">
+              <tr>
+                <th style="width:25%;">과정<span class="sub-label">Course</span></th>
+                <td colspan="3" style="font-weight:bold;">${student.course}</td>
+              </tr>
+              <tr>
+                <th style="width:25%;">학과<span class="sub-label">Major</span></th>
+                <td style="width:35%; font-weight:bold;">${student.major}</td>
+                <th style="width:18%;">학기<span class="sub-label">Sems</span></th>
+                <td style="width:22%; text-align:center; font-weight:bold;">${student.sems}</td>
+              </tr>
+              <tr>
+                <th>학번<span class="sub-label">Student No.</span></th>
+                <td style="font-weight:bold;">${student.id}</td>
+                <th>이름<span class="sub-label">Name</span></th>
+                <td style="text-align:center; font-weight:bold; font-size:9px;">${student.name}</td>
+              </tr>
+              <tr>
+                <th colspan="3" style="text-align:left;">등록총액<span class="sub-label">Tuition fee</span></th>
+                <td class="text-right">₩${student.tuition}</td>
+              </tr>
+              <tr>
+                <th colspan="3" style="text-align:left;">장학금<span class="sub-label">Scholarship</span></th>
+                <td class="text-right" style="color:red;">${scholarshipDisplay}</td>
+              </tr>
+              <tr>
+                <th colspan="3" style="text-align:left;">선납금<span class="sub-label">prepayment</span></th>
+                <td class="text-right">${prepaymentDisplay}</td>
+              </tr>
+              ${optionalRowHtml}
+              <tr>
+                <th colspan="3" style="text-align:left; background-color:#e2ece9;">합계<span class="sub-label">Total</span></th>
+                <td class="text-right" style="background-color:#e2ece9; color:#0f703d;">₩${student.netPay}</td>
+              </tr>
+            </table>
+            
+            <div class="receipt-text">위 금액을 영수하였습니다.</div>
+            
+            <div class="date-row">
+              <div class="date-center-text">년 월 일</div>
+              <div class="stamp-box">수납인</div>
+            </div>
+            
+            <div class="president-title">서울기독대학교 총장</div>
+            
+            <div class="account-info">
+              계좌번호 : ${student.accountNo}(${student.bankName})<br>
+              <span style="font-size:8px; font-weight:normal; color:#444;">Account No. ${student.accountNo} (${student.bankNameEng})</span>
+            </div>
+            
+            <ul class="notices">
+              <li>* 등록 기간 : ${formattedRegPeriod}<br><span class="eng-sub">${registrationEnglishSub}</span></li>
+              <li>* 분납 기간 : ${installmentPeriodText}</li>
+              <li>* 문의 : 02-380-2531 국제교육교류처<br><span class="eng-sub">Inquiries</span></li>
+              ${installmentBottomRows}
+            </ul>
+          </div>
+        `;
+      });
+      
+      document.getElementById('dynamic-bills').innerHTML = htmlContent;
+    }
+
+    // 4. 일괄 JPG 다운로드
+    async function downloadBatchJPG() {
+      const selectedDegree = document.getElementById('degreeFilter').value;
+      const selectedClass = document.getElementById('courseFilter').value;
+
+      let targetStudents = globalAdminStudents;
+      if (selectedDegree !== 'ALL') targetStudents = targetStudents.filter(s => s.degree === selectedDegree);
+      if (selectedClass !== 'ALL') targetStudents = targetStudents.filter(s => s.classGroup === selectedClass);
+
+      if (targetStudents.length === 0) {
+        alert("다운로드할 학생 데이터가 없습니다.");
+        return;
+      }
+
+      if (!confirm(`총 ${targetStudents.length}명의 고지서를 JPG 파일(ZIP 압축)로 다운로드하시겠습니까?`)) return;
+
+      const zip = new JSZip();
+      const printArea = document.getElementById('printArea');
+      const originalTitle = document.getElementById('portalTitle').innerText;
+
+      document.getElementById('portalTitle').innerText = "⏳ 고지서 JPG 생성 및 압축 중...";
+
+      for (let i = 0; i < targetStudents.length; i++) {
+        const student = targetStudents[i];
+        renderBillUI(student);
+
+        await new Promise(resolve => setTimeout(resolve, 50));
+
+        const canvas = await html2canvas(printArea, { scale: 2, useCORS: true });
+        const imgData = canvas.toDataURL('image/jpeg', 0.95).split(',')[1];
+
+        const classGroupStr = student.classGroup || "미지정분반";
+        const fileName = `${classGroupStr} ${student.name} ${student.id}.JPG`;
+        zip.file(fileName, imgData, { base64: true });
+      }
+
+      document.getElementById('portalTitle').innerText = "📦 압축 파일 다운로드 중...";
+      const content = await zip.generateAsync({ type: "blob" });
+      
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(content);
+      link.download = `Tuition_Bills_${selectedDegree}_${selectedClass}_${new Date().toISOString().slice(0,10)}.zip`;
+      link.click();
+
+      document.getElementById('portalTitle').innerText = originalTitle;
+      alert("JPG 일괄 다운로드가 완료되었습니다!");
+    }
+
+    // 5. 엑셀 표준 템플릿 다운로드
+    function downloadTemplateExcel() {
+      const headers = [
+        "학번", "생년월일 6자리\n(비밀번호)", "성명", "학과", "00과정 외국인유학생\n(학부/석사/박사)", "학차", 
+        "등록기간\n(예: 2026년 02월 25일(수) ~ 02월 28일(토))", "등록총액", "장학금\n(입력시 -까지 입력)\n예 : -200000", "선납금\n(입력시 -까지 입력)\n예 : -200000", "합계", 
+        "분납여부\n(Y or 빈칸)", "분납기간\n(예: 2026년 02월 25일(수) ~ 02월 28일(토))", "1차분납액\n<필요시 수기변경>\n기본은 합계의 1/2", "2차분납액", 
+        "은행명\n(예:기업은행)", "영문은행명\n(예: Industrial Bank of Korea)", "계좌번호\n(예:301-072207-04-038)\n<필요시 수기 변경>", 
+        "추가항목명\n(예:공로장학금,\n논문지도비)", "추가항목영문명\n(예:Merit Scholarship,\nThesis supervision)", "추가항목금액\n(입력시 -까지 입력)\n예 : -200,000", "분반"
+      ];
+      
+      const sampleRow = [
+        "20240301001", "030103", "TAMANG SANJOG", "AI빅데이터융합", "학부과정 외국인유학생", "6",
+        "2026년 8월 17일(월) ~ 2026년 8월 31일(월)", 3000000, -200000, 0, 2800000,
+        "Y", "2026년 8월 17일(월) ~ 2026년 8월 31일(월)\n2026년 9월 1일(화) ~ 2026년 9월 30일(수)", 1400000, 1400000,
+        "기업은행", "Industrial Bank of Korea", "301-072207-04-038",
+        "", "", "", "ET24-1E"
+      ];
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow], { cellDates: false });
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "MasterDB");
+      XLSX.writeFile(wb, `SCU_MasterDB_Template.xlsx`);
+    }
+
+    // 6. DB 엑셀 반출
+    function exportMasterDBToExcel() {
+      if (!globalAdminStudents || globalAdminStudents.length === 0) {
+        alert("반출할 DB 데이터가 없습니다.");
+        return;
+      }
+
+      const headers = [
+        "학번", "생년월일", "성명", "학과", "학위과정", "학차",
+        "등록기간", "등록총액", "장학금", "선납금", "합계",
+        "분납여부", "분납기간", "1차분납액", "2차분납액",
+        "은행명", "영문은행명", "계좌번호",
+        "추가항목명", "추가항목영문명", "추가항목금액", "분반"
+      ];
+
+      const dataRows = globalAdminStudents.map(s => {
+        const raw = s._raw;
+        return [
+          { t: 's', v: raw.id || "" },
+          { t: 's', v: raw.birth || "" },
+          raw.name || "",
+          raw.major || "",
+          raw.degree || "",
+          raw.sems || "",
+          raw.registration_period || "",
+          raw.tuition || 0,
+          raw.scholarship || 0,
+          raw.prepayment || 0,
+          raw.net_pay || 0,
+          raw.is_installment || "",
+          raw.installment_period || "",
+          raw.inst1 || 0,
+          raw.inst2 || 0,
+          raw.bank_name || "",
+          raw.bank_name_eng || "",
+          { t: 's', v: raw.account_no || "" },
+          raw.opt_title || "",
+          raw.opt_title_eng || "",
+          raw.opt_amount || 0,
+          raw.class_group || ""
+        ];
+      });
+
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "MasterDB");
+      XLSX.writeFile(wb, `SCU_MasterDB_${new Date().toISOString().slice(0,10)}.xlsx`);
+    }
+
+    // 7. 엑셀 업로드 (Supabase master_db 일괄 갱신)
+    function uploadMasterDBExcel(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = async function(e) {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array', cellText: true, raw: false });
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        const parsedData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "", raw: false });
+
+        if (parsedData.length < 2) {
+          alert("올바른 엑셀 데이터 형식이 아닙니다.");
+          return;
+        }
+
+        const upsertPayload = [];
+
+        for (let r = 1; r < parsedData.length; r++) {
+          const row = parsedData[r];
+          if (!row || !row[0]) continue;
+
+          let birthStr = (row[1] || "").toString().trim();
+          if (/^\d{1,5}$/.test(birthStr)) {
+            birthStr = birthStr.padStart(6, '0');
+          }
+
+          const cleanNum = (val) => {
+            if (val === "" || val === null || val === undefined) return 0;
+            const c = val.toString().replace(/[₩\\, ]/g, "").trim();
+            return (!isNaN(c) && c !== "") ? Number(c) : 0;
+          };
+
+          const instVal = (row[11] || "").toString().trim().toUpperCase();
+
+          upsertPayload.push({
+            id: row[0].toString().trim(),
+            birth: birthStr,
+            name: (row[2] || "").toString().trim(),
+            major: (row[3] || "").toString().trim(),
+            degree: (row[4] || "").toString().trim(),
+            sems: (row[5] || "").toString().trim(),
+            registration_period: (row[6] || "").toString().trim(),
+            tuition: cleanNum(row[7]),
+            scholarship: cleanNum(row[8]),
+            prepayment: cleanNum(row[9]),
+            net_pay: cleanNum(row[10]),
+            is_installment: (instVal === "Y") ? "Y" : "N",
+            installment_period: (row[12] || "").toString().trim(),
+            inst1: cleanNum(row[13]),
+            inst2: cleanNum(row[14]),
+            bank_name: (row[15] || "").toString().trim(),
+            bank_name_eng: (row[16] || "").toString().trim(),
+            account_no: (row[17] || "").toString().trim(),
+            opt_title: (row[18] || "").toString().trim(),
+            opt_title_eng: (row[19] || "").toString().trim(),
+            opt_amount: cleanNum(row[20]),
+            class_group: (row[21] || "").toString().trim()
+          });
+        }
+
+        if (!confirm(`총 ${upsertPayload.length}건의 데이터를 MasterDB에 업로드하시겠습니까?`)) return;
+
+        document.getElementById('portalTitle').innerText = "🔄 MasterDB 서버 업데이트 중...";
+
+        try {
+          // 기존 데이터 삭제 후 일괄 삽입(교체)
+          await supabase.from('master_db').delete().neq('id', '___NONE___');
+          const { error: upsertErr } = await supabase.from('master_db').upsert(upsertPayload);
+
+          if (upsertErr) throw upsertErr;
+
+          alert("MasterDB가 성공적으로 업데이트되었습니다.");
+
+          // 갱신된 데이터 재조회
+          const { data: refreshedRows } = await supabase.from('master_db').select('*').order('id', { ascending: true });
+          globalAdminStudents = (refreshedRows || []).map(parseStudentObject);
+          initAdminControls();
+          document.getElementById('portalTitle').innerText = "📄 Tuition Bill Issued";
+        } catch (err) {
+          alert("업데이트 중 오류 발생: " + err.message);
+          document.getElementById('portalTitle').innerText = "📄 Tuition Bill Issued";
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      event.target.value = "";
+    }
+
+    function goBack() {
+      document.getElementById('result-container').style.display = 'none';
+      document.getElementById('admin-panel').style.display = 'none';
+      document.getElementById('loginBox').style.display = 'block';
+      document.getElementById('studentId').value = '';
+      document.getElementById('birthdate').value = '';
+    }
+  </script>
+</body>
+</html>
